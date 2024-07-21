@@ -74,7 +74,7 @@ class Player:
             self.dir_right = push * 1 * self.speed
 
     def move(self):
-        for objects in nonplayer_moving_objects:
+        for objects in start_nonplayer_moving_objects:
             for object in objects:
                 object.rect.y -= self.dir_up
                 object.rect.x -= self.dir_left
@@ -111,7 +111,7 @@ class Enemy:
 
         if cls.summon_delay - (current_sec % cls.summon_delay) - 0.1 < 0:
             if cls.summon_onoff:
-                enemies.append(Enemy(START_ENEMY, ran_x, ran_y))
+                start_enemies.append(Enemy(START_ENEMY, ran_x, ran_y))
                 cls.summon_onoff = False
         else:
             cls.summon_onoff = True
@@ -163,6 +163,7 @@ SCREEN.fill((255, 255, 255))
 pygame.display.update()
 
 # ========== path ==========
+EFFECT_BLACK = "sprites/effect_black.png"
 MENU_BACKGROUND = "sprites/menu_background.png"
 MENU_START = "sprites/menu_start.png"
 MENU_START_HOVER = "sprites/menu_start_hover.png"
@@ -174,6 +175,7 @@ START_ENEMY = "sprites/start_enemy.png"
 
 # ========== layer ==========
 layers = {}
+L_EFFECT = pygame.Surface((WIDTH,HEIGHT), pygame.SRCALPHA).convert_alpha()
 L_Menu = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
 L_Intro = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
 L_Floor = pygame.Surface((WIDTH,HEIGHT), pygame.SRCALPHA)
@@ -184,31 +186,38 @@ layers[0] = [L_Menu]
 layers[1] = [L_Floor, L_Enemy, L_Player]
 
 # ========== sprite ==========
+# effect
+effect_black = pygame.image.load(EFFECT_BLACK).convert_alpha()
+
 # menu
 menu_background = pygame.image.load(MENU_BACKGROUND).convert_alpha()
 menu_background = pygame.transform.scale(menu_background, (WIDTH, HEIGHT))
+menu_effects = []
+for i in range(0, 5):
+    menu_effect = pygame.transform.scale(effect_black, (90, 5))
+    menu_effects.append(menu_effect)
 menu_start = Button("menu_start", MENU_START, WIDTH*1/10, HEIGHT*8/10, 100, 50)
 menu_exit = Button("menu_exit", MENU_EXIT, WIDTH*1/10, HEIGHT*9/10, 100, 50)
 
 # start
-floors = []
+start_floors = []
 for i in range(0, 3):
     for j in range(0, 3):
         floor = Floor(START_GROUND)
         floor.rect.x = (WIDTH/2)*j
         floor.rect.y = (HEIGHT/2)*i
-        floors.append(floor)
-player = Player(START_PLAYER, WIDTH / 2, HEIGHT / 2)
-enemies = []
+        start_floors.append(floor)
+start_player = Player(START_PLAYER, WIDTH / 2, HEIGHT / 2)
+start_enemies = []
 
-movable_objects = []
-movable_objects.append([player])
-movable_objects.append(enemies)
-movable_objects.append(floors)
+start_movable_objects = []
+start_movable_objects.append([start_player])
+start_movable_objects.append(start_enemies)
+start_movable_objects.append(start_floors)
 
-nonplayer_moving_objects = []
-nonplayer_moving_objects.append(enemies)
-nonplayer_moving_objects.append(floors)
+start_nonplayer_moving_objects = []
+start_nonplayer_moving_objects.append(start_enemies)
+start_nonplayer_moving_objects.append(start_floors)
 
 # end
 
@@ -243,9 +252,9 @@ def main():
                 if menu_exit.rect.collidepoint(event.pos):
                     run = False
             if event.type == pygame.KEYDOWN:
-                player.move_to(event.key, 1)
+                start_player.move_to(event.key, 1)
             if event.type == pygame.KEYUP:
-                player.move_to(event.key, 0)
+                start_player.move_to(event.key, 0)
 
         # button hover check
         if menu_start.rect.collidepoint(pygame.mouse.get_pos()):
@@ -262,20 +271,21 @@ def main():
             L_Menu.blit(menu_background, (0, 0))
             menu_start.draw(L_Menu)
             menu_exit.draw(L_Menu)
+            # effect apply required
 
         # start : 1
         if state == 1:
             # floor
-            for floor in floors:
+            for floor in start_floors:
                 floor.re_pos()
 
             # enemy
             Enemy.summon(current_sec)
-            for enemy in enemies:
-                enemy.move(player)
+            for enemy in start_enemies:
+                enemy.move(start_player)
 
             # player
-            player.move()
+            start_player.move()
 
         # end : 2
         if state == 2:
@@ -283,7 +293,7 @@ def main():
 
         # ========== update ==========
         # update screen
-        for objects in movable_objects:
+        for objects in start_movable_objects:
             for object in objects:
                 object.draw()
         for key, value in layers.items():
