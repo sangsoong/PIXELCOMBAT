@@ -1,4 +1,0 @@
-overwrited line1
-overwrited line2
-new line1
-new line2
