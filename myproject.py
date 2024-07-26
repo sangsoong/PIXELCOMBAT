@@ -28,6 +28,19 @@ class Button:
     def draw(self, win):
         win.blit(self.image, self.rect)
 
+class Effect:
+    def __init__(self, image, x, y, w, h):
+        self.image = pygame.image.load(image)
+        self.image = pygame.transform.scale(self.image, (w, h))
+        self.w = w
+        self.h = h
+        self.rect = self.image.get_rect()
+        self.rect.x = x
+        self.rect.y = y
+    
+    def draw(self, win):
+        win.blit(self.image, self.rect)
+
 class Floor:
     def __init__(self, image):
         self.image = pygame.image.load(image).convert_alpha()
@@ -38,13 +51,13 @@ class Floor:
 
     def re_pos(self):
         if self.rect.x <= WIDTH * (-0.5):
-            self.rect.x = WIDTH
+            self.rect.x = WIDTH - 5
         if self.rect.x > WIDTH:
-            self.rect.x = WIDTH * (-0.5)
+            self.rect.x = WIDTH * (-0.5) + 5
         if self.rect.y <= HEIGHT * (-0.5):
-            self.rect.y = HEIGHT
+            self.rect.y = HEIGHT - 5
         if self.rect.y > HEIGHT:
-            self.rect.y = HEIGHT * (-0.5)
+            self.rect.y = HEIGHT * (-0.5) + 5
 
     def draw(self):
         L_Floor.blit(self.image, self.rect)
@@ -169,13 +182,13 @@ MENU_START = "sprites/menu_start.png"
 MENU_START_HOVER = "sprites/menu_start_hover.png"
 MENU_EXIT = "sprites/menu_exit.png"
 MENU_EXIT_HOVER = "sprites/menu_exit_hover.png"
-START_GROUND = "sprites/start_ground.png"
+START_GROUND1 = "sprites\start_ground\grass_1.png"
 START_PLAYER = "sprites/start_player.png"
 START_ENEMY = "sprites/start_enemy.png"
 
 # ========== layer ==========
 layers = {}
-L_EFFECT = pygame.Surface((WIDTH,HEIGHT), pygame.SRCALPHA).convert_alpha()
+L_EFFECT = pygame.Surface((WIDTH,HEIGHT), pygame.SRCALPHA)
 L_Menu = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
 L_Intro = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
 L_Floor = pygame.Surface((WIDTH,HEIGHT), pygame.SRCALPHA)
@@ -194,7 +207,9 @@ menu_background = pygame.image.load(MENU_BACKGROUND).convert_alpha()
 menu_background = pygame.transform.scale(menu_background, (WIDTH, HEIGHT))
 menu_effects = []
 for i in range(0, 5):
-    menu_effect = pygame.transform.scale(effect_black, (90, 5))
+    ran_x = random.randint(WIDTH, WIDTH+2000)
+    ran_y = random.randint(int(HEIGHT*(1/10)), int(HEIGHT*(9/10)))
+    menu_effect = Effect(EFFECT_BLACK, ran_x, ran_y, 1000, 5)
     menu_effects.append(menu_effect)
 menu_start = Button("menu_start", MENU_START, WIDTH*1/10, HEIGHT*8/10, 100, 50)
 menu_exit = Button("menu_exit", MENU_EXIT, WIDTH*1/10, HEIGHT*9/10, 100, 50)
@@ -203,7 +218,7 @@ menu_exit = Button("menu_exit", MENU_EXIT, WIDTH*1/10, HEIGHT*9/10, 100, 50)
 start_floors = []
 for i in range(0, 3):
     for j in range(0, 3):
-        floor = Floor(START_GROUND)
+        floor = Floor(START_GROUND1)
         floor.rect.x = (WIDTH/2)*j
         floor.rect.y = (HEIGHT/2)*i
         start_floors.append(floor)
@@ -256,22 +271,31 @@ def main():
             if event.type == pygame.KEYUP:
                 start_player.move_to(event.key, 0)
 
-        # button hover check
-        if menu_start.rect.collidepoint(pygame.mouse.get_pos()):
-            menu_start.re_image(MENU_START_HOVER, menu_start.rect.x, menu_start.rect.y, menu_start.w, menu_start.h)
-        else:
-            menu_start.re_image(MENU_START, menu_start.rect.x, menu_start.rect.y, menu_start.w, menu_start.h)
-        if menu_exit.rect.collidepoint(pygame.mouse.get_pos()):
-            menu_exit.re_image(MENU_EXIT_HOVER, menu_exit.rect.x, menu_exit.rect.y, menu_exit.w, menu_exit.h)
-        else:
-            menu_exit.re_image(MENU_EXIT, menu_exit.rect.x, menu_exit.rect.y, menu_exit.w, menu_exit.h)
-
         # menu : 0
         if state == 0:
             L_Menu.blit(menu_background, (0, 0))
             menu_start.draw(L_Menu)
             menu_exit.draw(L_Menu)
-            # effect apply required
+
+            # button hover check
+            if menu_start.rect.collidepoint(pygame.mouse.get_pos()):
+                menu_start.re_image(MENU_START_HOVER, menu_start.rect.x, menu_start.rect.y, menu_start.w, menu_start.h)
+            else:
+                menu_start.re_image(MENU_START, menu_start.rect.x, menu_start.rect.y, menu_start.w, menu_start.h)
+            if menu_exit.rect.collidepoint(pygame.mouse.get_pos()):
+                menu_exit.re_image(MENU_EXIT_HOVER, menu_exit.rect.x, menu_exit.rect.y, menu_exit.w, menu_exit.h)
+            else:
+                menu_exit.re_image(MENU_EXIT, menu_exit.rect.x, menu_exit.rect.y, menu_exit.w, menu_exit.h)
+
+            # effect
+            for menu_effect in menu_effects:
+                print(menu_effect.rect.x)
+                if menu_effect.rect.x < -1000:
+                    menu_effect.rect.x = random.randint(WIDTH, WIDTH+1000)
+                    menu_effect.rect.y = random.randint(int(HEIGHT*(1/20)), int(HEIGHT*(19/20)))
+                else:
+                    menu_effect.rect.x -= 15
+                    menu_effect.draw(L_Menu)
 
         # start : 1
         if state == 1:
@@ -292,14 +316,16 @@ def main():
             pass
 
         # ========== update ==========
-        # update screen
+        # update object
         for objects in start_movable_objects:
             for object in objects:
                 object.draw()
+        # update layer
         for key, value in layers.items():
             if key == state:
                 for layer in value:
                     SCREEN.blit(layer, (0, 0))
+        # intro
         if state == 1 and intro:    # intro
             L_Intro.fill((0, 0, 0, intro))
             SCREEN.blit(L_Intro, (0, 0))
