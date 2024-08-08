@@ -129,7 +129,6 @@ class Player:
         rel_x = pygame.mouse.get_pos()[0] - self.rect.centerx
         rel_y = self.rect.centery - pygame.mouse.get_pos()[1]
         angle = (180/math.pi) * math.atan2(rel_y, rel_x) + 90
-        print(angle)
         self.image = pygame.transform.rotate(self.image, angle)
 
         L_Player.blit(self.image, self.rect)
