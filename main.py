@@ -1,11 +1,32 @@
 import math
+from turtle import screensize
 import pygame
 import sys
 import random
 
 from paths import *
 
-# ================================================== classes
+# ================================================== classes ========================================
+
+class Text:
+    def __init__(self, text, color=(0, 0, 0), pos=(0, 0), size=10, font=None):
+        self.rawtext = text
+        self.rawcolor = color
+        self.rawsize = size
+        self.font = pygame.font.Font(font, size)
+        self.text = self.font.render(text, False, color)
+        self.rect = self.text.get_rect(center=pos)
+    
+    def write(self, text):
+        self.text = self.font.render(text, False, self.rawcolor)
+        self.rect = self.text.get_rect(center=self.rect.center)
+    
+    def goto(self, pos):
+        self.rect.center = pos
+
+    def draw(self, win):
+        win.blit(self.text, self.rect)
+
 class Image:
     def __init__(self, image, pos, size):
         self.image = pygame.image.load(image).convert_alpha()
@@ -18,6 +39,10 @@ class Image:
     def draw(self, win):
         win.blit(self.image, self.rect)
 
+class Background(Image):
+    def __init__(self, image):
+        super().__init__(image, (WIDTH/2, HEIGHT/2), (WIDTH, HEIGHT))
+
 class Button(Image):
     def __init__(self, image, hov_image, pos, size):
         super().__init__(image, pos, size)
@@ -27,7 +52,7 @@ class Button(Image):
 
     def goto(self, pos):
         super().goto(pos)
-        self.hov_rect.center = (pos[0], pos[1])
+        self.hov_rect.center = pos
     
     def draw(self, win):
         if self.rect.collidepoint(pygame.mouse.get_pos()):
@@ -79,6 +104,7 @@ class Enemy1(Entity):
 class Logic:
     mode = "main"
     cur_tick = 0
+    intro_time = 0
 
     @classmethod
     def start(cls):
@@ -104,7 +130,7 @@ class Logic:
     
     @classmethod
     def main(cls):
-        L_MAIN.blit(main_background, (0, 0))
+        main_background.draw(L_MAIN)
         main_start.draw(L_MAIN)
         main_exit.draw(L_MAIN)
         for event in pygame.event.get():
@@ -123,27 +149,42 @@ class Logic:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 return False
-        cls.mode = "running"
+        intro_percentage.write(f"{cls.intro_time}%")
+        intro_loading.draw(L_INTRO)
+        intro_percentage.draw(L_INTRO)
+        cls.intro_time += 2
+        if cls.intro_time > 100:
+            cls.mode = "running"
         return True
     
     @classmethod
     def running(cls):
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return False
+        
         return True
 
     @classmethod
     def gameover(cls):
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return False
+        cls.mode = "main"
         return True
 
-# ================================================== variables
+# ================================================== variables ==================================================
+
 pygame.init()
 
 CLOCK = pygame.time.Clock()
 ENTER_TICK = pygame.time.get_ticks()
-current_tick = 0
 
 WIDTH = 800
 HEIGHT = 800
-SCREEN = pygame.display.set_mode((WIDTH,HEIGHT))
+CENTER = (WIDTH/2, HEIGHT/2)
+SIZE = (WIDTH, HEIGHT)
+SCREEN = pygame.display.set_mode(SIZE)
 pygame.display.set_caption("hackAslash")
 SCREEN.fill((255, 255, 255))
 pygame.display.update()
@@ -157,58 +198,20 @@ layers = {"main": L_MAIN,
           "running": L_RUNNING,
           "gameover": L_GAMEOVER}
 
-main_background = pygame.image.load(MAIN_BACKGROUND).convert_alpha()
-main_background = pygame.transform.scale(main_background, (WIDTH, HEIGHT))
-main_start = Button(MAIN_START, MAIN_START_HOVER, (WIDTH*1/2, HEIGHT*8/10), (200, 80))
-main_exit = Button(MAIN_EXIT, MAIN_EXIT_HOVER, (WIDTH*1/2, HEIGHT*9/10), (200, 80))
+main_background = Background(MAIN_BACKGROUND)
+main_start = Button(MAIN_START, MAIN_START_HOVER, (WIDTH*1/2, HEIGHT*8/10), (200, 70))
+main_exit = Button(MAIN_EXIT, MAIN_EXIT_HOVER, (WIDTH*1/2, HEIGHT*9/10), (200, 70))
 
-running_wall = pygame.image.load(START_WALL).convert_alpha()
-running_floor = pygame.image.load(START_FLOOR).convert_alpha()
-running_player = Player((WIDTH/2, HEIGHT/2), (100, 100))
+intro_loading = Image(EFFECT_BLACK, CENTER, SIZE)
+intro_percentage = Text("", (255, 255, 255), CENTER, 30)
+
+running_wall = Structure(START_WALL, CENTER, SIZE)
+running_floor = Background(START_FLOOR)
+running_player = Player(CENTER, (100, 100))
 running_enemies = []
 running_collidable_objects = [running_enemies]
 
-# ======================================== run
+# ======================================== run ========================================
 if __name__ == "__main__":
     Logic.start()
     sys.exit()
-
-'''
-
-        if state == 1:
-            # floor
-            for floor in start_floors:
-                floor.re_pos()
-                floor.draw()
-
-            # enemy
-            Enemy.summon(current_sec)
-            for enemy in start_enemies:
-                enemy.move(start_player)
-                enemy.draw()
-
-            # player
-            start_player.move()
-            start_player.draw()
-
-            # effect
-            start_fog.draw(L_Effect)
-
-        if state == 2:
-            pass
-
-        # ========== update ==========
-        # update layer
-        for key, value in layers.items():
-            if key == state:
-                for layer in value:
-                    SCREEN.blit(layer, (0, 0))
-        # intro
-        if state == 1 and intro:    # intro
-            L_Intro.fill((0, 0, 0, intro))
-            SCREEN.blit(L_Intro, (0, 0))
-            intro -= 5
-
-        pygame.display.update()
-        CLOCK.tick(60)
-'''
