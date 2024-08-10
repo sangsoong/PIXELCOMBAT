@@ -1,12 +1,11 @@
-import math
-from turtle import screensize
 import pygame
 import sys
+import math
 import random
 
 from paths import *
 
-# ================================================== classes ========================================
+# ================================================== classes ==================================================
 
 class Text:
     def __init__(self, text, color=(0, 0, 0), pos=(0, 0), size=10, font=None):
@@ -100,6 +99,52 @@ class Player(Entity):
 class Enemy1(Entity):
     def __init__(self, x, y):
         super().__init__(START_ENEMY1, x, y)
+
+class Room:
+    def __init__(self, pos, type):
+        self.pos = pos
+        self.type = type
+        self.att = {"up": 0,
+                    "left": 0,
+                    "down": 0,
+                    "right": 0}
+
+class Dungeon:
+    map_size = [5, 5]
+    room_maxcnt = 8
+    rooms = []
+
+    @classmethod
+    def generate(cls, room_maxcnt):
+        cls.room_maxcnt = room_maxcnt
+        cls.make_rooms()
+
+    @classmethod
+    def make_rooms(cls):
+        start_x = random.randint(0, cls.map_size[0]-1)
+        start_y = random.randint(0, cls.map_size[1]-1)
+        cls.rooms.append(Room((start_x, start_y), 0))
+        room_curcnt = 1
+        for i in range(0, cls.room_maxcnt-1):
+            cur_x = cls.rooms[i].pos[0]
+            cur_y = cls.rooms[i].pos[1]
+            room_gen = [random.randint(0, 1), random.randint(0, 1), random.randint(0, 1), random.randint(0, 1)]
+            new_rooms = [0, 0, 0, 0]
+            room_curcnt += 1
+            if (room_curcnt < cls.room_maxcnt) and (room_gen[0] == 1) and (cls.rooms[i].att["up"] == 0) and (cur_y != cls.map_size[1]):
+                new_rooms[0] = (Room((cur_x, cur_y+1), 2))
+            if (room_curcnt < cls.room_maxcnt) and (room_gen[1] == 1) and (cls.rooms[i].att["left"] == 0) and (cur_x != 0):
+                new_rooms[1] = (Room((cur_x-1, cur_y), 2))
+            if (room_curcnt < cls.room_maxcnt) and (room_gen[2] == 1) and (cls.rooms[i].att["down"] == 0) and (cur_y != 0):
+                new_rooms[2] = (Room((cur_x, cur_y-1), 2))
+            if (room_curcnt < cls.room_maxcnt) and (room_gen[3] == 1) and (cls.rooms[i].att["right"] == 0) and (cur_x != cls.map_size[0]):
+                new_rooms[3] = (Room((cur_x+1, cur_y), 2))
+            cls.rooms[i].att["up"] = new_rooms[0]
+            cls.rooms[i].att["left"] = new_rooms[1]
+            cls.rooms[i].att["down"] = new_rooms[2]
+            cls.rooms[i].att["right"] = new_rooms[3]
+            for new_room in new_rooms:
+                cls.rooms.append(new_room)
 
 class Logic:
     mode = "main"
@@ -211,7 +256,7 @@ running_player = Player(CENTER, (100, 100))
 running_enemies = []
 running_collidable_objects = [running_enemies]
 
-# ======================================== run ========================================
+# ================================================== run ==================================================
 if __name__ == "__main__":
     Logic.start()
     sys.exit()
