@@ -17,20 +17,23 @@ HEIGHT = 800
 CENTER = (WIDTH/2, HEIGHT/2)
 SIZE = (WIDTH, HEIGHT)
 SCREEN = pygame.display.set_mode(SIZE)
-pygame.display.set_caption("hackAslash")
+pygame.display.set_caption("PIXEL COMBAT")
 SCREEN.fill((255, 255, 255))
 pygame.display.update()
 
+DUN_MAP_SIZE = (5, 5)
+MAP_BKG_SIZE = (WIDTH*0.75, HEIGHT*0.75)
+MAP_ROOM_SIZE = (MAP_BKG_SIZE[0]/DUN_MAP_SIZE[0], MAP_BKG_SIZE[1]/DUN_MAP_SIZE[1])
 PLAYER_SIZE = (WIDTH/16, HEIGHT/16)
 ENEMY_SIZE = (WIDTH/16, HEIGHT/16)
 VER_DOOR_SIZE = (WIDTH*(3/64)*(115/100), HEIGHT*(10/64)*(115/100))
 HOR_DOOR_SIZE = (WIDTH*(10/64)*(115/100), HEIGHT*(3/64)*(115/100))
-off_x = HOR_DOOR_SIZE[0]*0.5
-off_y = VER_DOOR_SIZE[1]*0.5
-DOOR_POS_UP = (WIDTH/2, off_y)
-DOOR_POS_LEFT = (off_x, HEIGHT/2)
-DOOR_POS_DOWN = (WIDTH/2, HEIGHT-off_y)
-DOOR_POS_RIGHT = (WIDTH-off_x, HEIGHT/2)
+DOOR_OFF_X = VER_DOOR_SIZE[0]*0.5
+DOOR_OFF_Y = HOR_DOOR_SIZE[1]*0.5
+DOOR_POS_UP = (WIDTH/2, DOOR_OFF_Y)
+DOOR_POS_LEFT = (DOOR_OFF_X, HEIGHT/2)
+DOOR_POS_DOWN = (WIDTH/2, HEIGHT-DOOR_OFF_Y)
+DOOR_POS_RIGHT = (WIDTH-DOOR_OFF_X, HEIGHT/2)
 
 L_MAIN = pygame.Surface((WIDTH,HEIGHT), pygame.SRCALPHA)
 L_INTRO = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
@@ -98,13 +101,38 @@ class Button(Image):
             win.blit(self.image, self.rect)
 
 class Structure(Image):
-    def __init__(self, path, pos, size):
+    def __init__(self, room, path, pos, size):
+        self.room = room
         super().__init__(path, pos, size)
 
 class Entity(Image):
     def __init__(self, room, path, pos, size):
         self.room = room
         super().__init__(path, pos, size)
+
+class Projectile(Entity):
+    def __init__(self, room, path, pos, size, angle, speed, owner):
+        super().__init__(room, path, pos, size)
+        self.angle = angle
+        self.speed = speed
+        self.owner = owner
+    
+    def collide_check(self):
+        for collide in Logic.wrk_colliders:
+            for object in collide:
+                if object is not self and object.room == self.room and pygame.sprite.collide_mask(object, self):
+                    if type(object) == Structure:
+                        return (True, 0)
+                    elif type(self.owner) == Enemy1 and type(object) == Player:
+                        object.health -= 10
+                        return (True, object)
+                    elif type(self.owner) == Player and type(object) == Enemy1:
+                        object.health -= 10
+                        return (True, object)
+
+    def move(self):
+        self.rect.x += math.cos(self.angle) * self.speed
+        self.rect.y -= math.sin(self.angle) * self.speed
 
 class Player(Entity):
     def __init__(self, room, pos, size):
@@ -114,6 +142,32 @@ class Player(Entity):
         self.dir_down = 0
         self.dir_right = 0
         self.speed = 5
+        self.max_health = 100
+        self.health = self.max_health
+        self.shoot_delay = 0
+        self.shoot_max_delay = 30
+
+    def show_health(self):
+        health = self.health
+        if self.health < 0:
+            health = 0
+        elif self.health > self.max_health:
+            health = self.max_health
+            self.health = self.max_health
+        health_bar = Image(EFFECT_RED, (self.rect.centerx, self.rect.midtop[1]-10), (self.health, 10))
+        health_bar.draw(L_RUNNING)
+        health_text = Text(f"{health}/{self.max_health}", (255, 255, 255), (self.rect.centerx, self.rect.midtop[1]-10), 20)
+        health_text.draw(L_RUNNING)
+    
+    def shoot(self):
+        self.shoot_delay += 1
+        if self.shoot_delay >= self.shoot_max_delay:
+            self.shoot_delay = 0
+            rel_x = pygame.mouse.get_pos()[0] - self.rect.centerx
+            rel_y = self.rect.centery - pygame.mouse.get_pos()[1]
+            angle = math.atan2(rel_y, rel_x)
+            projectile = Projectile(self.room, WRK_PLAYER_BULLET, self.rect.center, (10, 10), angle, 5, self)
+            Logic.wrk_projectiles.append(projectile)
 
     def move_dir(self, key, push):
         directions = [(pygame.K_w, "dir_up", -1), (pygame.K_a, "dir_left", -1), (pygame.K_s, "dir_down", 1), (pygame.K_d, "dir_right", 1)]
@@ -125,36 +179,91 @@ class Player(Entity):
         directions = [(self.dir_up, "centery"), (self.dir_left, "centerx"), (self.dir_down, "centery"), (self.dir_right, "centerx")]
         for direction, axis in directions:
             self.rect.__setattr__(axis, self.rect.__getattribute__(axis) + direction)
-            for objects in Logic.wkg_colliders:
+            for objects in Logic.wrk_colliders:
                 for object in objects:
-                    if pygame.sprite.collide_mask(object, self):
-                        self.rect.__setattr__(axis, self.rect.__getattribute__(axis) - direction)
-                        break
+                    if id(object) != id(self) and object.room == self.room and pygame.sprite.collide_mask(object, self):
+                        if type(object) == Enemy1:
+                            pass
+                        elif type(object) == Projectile:
+                            pass
+                        else:
+                            self.rect.__setattr__(axis, self.rect.__getattribute__(axis) - direction)
+                            break
     
     def room_to(self):
+        off_x = Logic.wrk_player.rect.width/2
+        off_y = Logic.wrk_player.rect.height/2
         for side, door in self.room.door.items():
             if door != 0 and pygame.sprite.collide_mask(self, door):
                 room = self.room.side[side]
                 self.room = room
                 if door.rect.centery < CENTER[1] - 10:
-                    self.goto((self.rect.centerx, DOOR_POS_DOWN[1] - (HOR_DOOR_SIZE[1])))
+                    self.goto((self.rect.centerx, DOOR_POS_DOWN[1] - (HOR_DOOR_SIZE[1]/2) - off_y))
                 elif door.rect.centerx < CENTER[0] - 10:
-                    self.goto((DOOR_POS_RIGHT[0] - (VER_DOOR_SIZE[0]), self.rect.centery))
+                    self.goto((DOOR_POS_RIGHT[0] - (VER_DOOR_SIZE[0]) - off_x, self.rect.centery))
                 elif door.rect.centery > CENTER[1] + 10:
-                    self.goto((self.rect.centerx, DOOR_POS_UP[1] + (HOR_DOOR_SIZE[1])))
+                    self.goto((self.rect.centerx, DOOR_POS_UP[1] + (HOR_DOOR_SIZE[1] + off_y)))
                 elif door.rect.centerx > CENTER[0] + 10:
-                    self.goto((DOOR_POS_LEFT[0] + (VER_DOOR_SIZE[0]) + 1, self.rect.centery))
+                    self.goto((DOOR_POS_LEFT[0] + (VER_DOOR_SIZE[0]) + off_x, self.rect.centery))
                 break
 
 class Enemy1(Entity):
-    def __init__(self, path, room, pos, size):
-        super().__init__(path, room, pos, size)
-        Logic.wkg_enemies.append(self)
+    def __init__(self, room, path, pos, size):
+        super().__init__(room, path, pos, size)
+        self.speed = 1.5
+        self.shoot_delay = 0
+        self.shoot_max_delay = 60
+        self.max_health = 30
+        self.health = self.max_health
+
+    def show_health(self):
+        health = self.health
+        if self.health <= 0:
+            for collide in Logic.wrk_colliders:
+                for object in collide:
+                    if object is self:
+                        collide.remove(object)
+                    if type(object) == Projectile:
+                        if object.owner == self:
+                            collide.remove(object)
+            Logic.wrk_player.health += 3
+        elif self.health > self.max_health:
+            health = self.max_health
+        health_bar = Image(EFFECT_RED, (self.rect.centerx, self.rect.midtop[1]-10), (self.health, 10))
+        health_bar.draw(L_RUNNING)
+        health_text = Text(f"{health}/{self.max_health}", (255, 255, 255), (self.rect.centerx, self.rect.midtop[1]-10), 20)
+        health_text.draw(L_RUNNING)
+
+    def move(self):
+        for objects in Logic.wrk_colliders:
+            for object in objects:
+                if id(object) != id(self) and object.room == self.room and pygame.sprite.collide_mask(object, self):
+                    if type(object) == Player:
+                        return
+                    elif type(object) == Enemy1:
+                        pass
+                    elif type(object) == Projectile:
+                        pass
+        rel_x = Logic.wrk_player.rect.centerx - self.rect.centerx
+        rel_y = self.rect.centery - Logic.wrk_player.rect.centery
+        angle = math.atan2(rel_y, rel_x)
+        self.rect.centerx += math.cos(angle) * self.speed
+        self.rect.centery -= math.sin(angle) * self.speed
+
+    def shoot(self):
+        self.shoot_delay += 1
+        if self.shoot_delay > self.shoot_max_delay:
+            self.shoot_delay = 0
+            rel_x = Logic.wrk_player.rect.centerx - self.rect.centerx
+            rel_y = self.rect.centery - Logic.wrk_player.rect.centery
+            angle = math.atan2(rel_y, rel_x)
+            projectile = Projectile(self.room, WRK_ENEMY1_BULLET, self.rect.center, (10, 10), angle, 5, self)
+            Logic.wrk_projectiles.append(projectile)
 
 class Room:
     def __init__(self, pos, type):
         paths = [(WRK_WALL1, WRK_FLOOR1), (WRK_WALL1, WRK_FLOOR1), (WRK_WALL1, WRK_FLOOR1)]
-        self.wall = Structure(paths[type][0], CENTER, SIZE)
+        self.wall = Structure(self, paths[type][0], CENTER, SIZE)
         self.floor = Background(paths[type][1])
         self.pos = pos
         self.type = type
@@ -166,22 +275,21 @@ class Room:
                      "left": 0,
                      "down": 0,
                      "right": 0}
+        self.enemies = []
 
     def generate(self):
-        room_cnt = Dungeon.room_cnt
-        map_size = Dungeon.map_size
         rooms = Dungeon.rooms
         rooms_pos = Dungeon.rooms_pos
         x, y = self.pos
         dirs1 = [(x, y+1), (x-1, y), (x, y-1), (x+1, y)]
-        dirs2 = [(y, map_size[1]-1), (x, 0), (y, 0), (x, map_size[0]-1)]
+        dirs2 = [(y, Dungeon.map_size[1]-1), (x, 0), (y, 0), (x, Dungeon.map_size[0]-1)]
         dirs3 = ["up", "left", "down", "right"]
         for i in range(0, 4):
             if random.randint(0, 2):
-                if len(rooms) < room_cnt:
+                if len(rooms) < Dungeon.room_cnt:
                     if dirs2[i][0] != dirs2[i][1]:
-                        if dirs1[i] not in rooms_pos or len(rooms) == 1:
-                            newroom = self.side[dirs3[i]] = Room(dirs1[i], 2)
+                        if dirs1[i] not in rooms_pos:
+                            newroom = Room(dirs1[i], 2)
                             self.side[dirs3[i]] = newroom
                             newroom.side[dirs3[(i+2)%4]] = self
                             rooms.append(newroom)
@@ -190,16 +298,40 @@ class Room:
     def set_door(self):
         paths = [WRK_DOOR1, WRK_DOOR1, WRK_DOOR1]
         if self.side["up"]:
-            self.door["up"] = Structure(paths[self.type], DOOR_POS_UP, (HOR_DOOR_SIZE))
+            self.door["up"] = Structure(self, paths[self.type], DOOR_POS_UP, (HOR_DOOR_SIZE))
         if self.side["left"]:
-            self.door["left"] = Structure(paths[self.type], DOOR_POS_LEFT, (VER_DOOR_SIZE))
+            self.door["left"] = Structure(self, paths[self.type], DOOR_POS_LEFT, (VER_DOOR_SIZE))
         if self.side["down"]:
-            self.door["down"] = Structure(paths[self.type], DOOR_POS_DOWN, (HOR_DOOR_SIZE))
+            self.door["down"] = Structure(self, paths[self.type], DOOR_POS_DOWN, (HOR_DOOR_SIZE))
         if self.side["right"]:
-            self.door["right"] = Structure(paths[self.type], DOOR_POS_RIGHT, (VER_DOOR_SIZE))
+            self.door["right"] = Structure(self, paths[self.type], DOOR_POS_RIGHT, (VER_DOOR_SIZE))
+    
+    def set_enemy(self, count):
+        for i in range(0, count):
+            enemy = None
+            repeat = True
+            while repeat:
+                repeat = False
+                ran_x = random.randint(0, SIZE[0])
+                ran_y = random.randint(0, SIZE[1])
+                for door in self.door.values():
+                    if door != 0 and math.sqrt((ran_x - door.rect.centerx)**2 + (ran_y - door.rect.centery)**2) < max(door.rect.width, door.rect.height)*2:
+                        repeat = True
+                        break
+                if repeat:
+                    continue
+                enemy = Enemy1(self, WRK_ENEMY1, (ran_x, ran_y), ENEMY_SIZE)
+                for collide in Logic.wrk_colliders:
+                    for object in collide:
+                        if pygame.sprite.collide_mask(enemy, object):
+                            repeat = True
+                            break
+                    if repeat:
+                        break
+            self.enemies.append(enemy)
 
 class Dungeon:
-    map_size = [5, 5]
+    map_size = DUN_MAP_SIZE
     floor = 0
     room_cnt = 0
     rooms = []
@@ -209,40 +341,62 @@ class Dungeon:
     def initiaize(cls):
         cls.floor = 0
         cls.room_cnt = 0
-        cls.rooms.clear()
-        cls.rooms_pos.clear()
 
     @classmethod
     def next_floor(cls):
         cls.floor += 1
         cls.room_cnt = cls.floor + 4
-        cls.rooms.clear()
-        cls.rooms_pos.clear()
+        Logic.wrk_colliders.clear()
+        Logic.wrk_colliders.append([Logic.wrk_player])
+        Logic.wrk_colliders.append(Logic.wrk_projectiles)
         cls.generate()
-        walls = []
-        for room in cls.rooms:
-            walls.append(room.wall)
-        Logic.wkg_colliders.append(walls)
 
     @classmethod
     def generate(cls):
         start_x = random.randint(0, cls.map_size[0]-1)
         start_y = random.randint(0, cls.map_size[1]-1)
+        walls = []
         while True:
-            cls.rooms.clear
+            cls.rooms.clear()
             cls.rooms_pos.clear()
             start_room = Room((start_x, start_y), 0)
             cls.rooms.append(start_room)
             cls.rooms_pos.append(start_room.pos)
-            for i in range(0, cls.room_cnt-1):
+            for i in range(0, cls.room_cnt):
                 if len(cls.rooms) == i:
                     break
                 cls.rooms[i].generate()
                 cls.rooms[i].set_door()
+                walls.append(cls.rooms[i].wall)
+                Logic.wrk_colliders.append(cls.rooms[i].enemies)
             if len(cls.rooms) == cls.room_cnt:
+                cls.rooms[-1].type = 1
+                Logic.wrk_colliders.append(walls)
                 break
-        cls.rooms[-1].type = 1
-        cls.rooms[-1].set_door()
+        for room in cls.rooms:
+            if room.type == 2:
+                room.set_enemy(random.randint(1, 4))
+            elif room.type == 1:
+                room.set_enemy(random.randint(5, 8))
+    
+    @classmethod
+    def map(cls, player):
+        map = Image(WRK_MAP_BACKGROUND, CENTER, MAP_BKG_SIZE)
+        map.draw(L_RUNNING)
+        for room in cls.rooms:
+            rel_x = room.pos[0] - int(cls.map_size[0]/2)
+            rel_y = room.pos[1] - int(cls.map_size[1]/2)
+            path = ""
+            if room == player.room:
+                path = WRK_MAP_ROOM_CUR
+            elif room.type == 0:
+                path = WRK_MAP_ROOM0
+            elif room.type == 1:
+                path = WRK_MAP_ROOM1
+            elif room.type == 2:
+                path = WRK_MAP_ROOM2
+            image = Image(path, (CENTER[0]+MAP_ROOM_SIZE[0]*rel_x, CENTER[1]-MAP_ROOM_SIZE[1]*rel_y), MAP_ROOM_SIZE)
+            image.draw(L_RUNNING)
 
 class Logic:
     mode = "main"
@@ -256,9 +410,9 @@ class Logic:
     intro_percentage = Text("", (255, 255, 255), CENTER, 30)
     intro_time = 0
     
-    wkg_player = None
-    wkg_enemies = []
-    wkg_colliders = []
+    wrk_player = Player(None, CENTER, PLAYER_SIZE)
+    wrk_colliders = []
+    wrk_projectiles = []
 
     @classmethod
     def start(cls):
@@ -308,17 +462,13 @@ class Logic:
         if cls.intro_time > 100:
             cls.mode = "running"
             Dungeon.next_floor()
-            cls.wkg_player = Player(Dungeon.rooms[0], CENTER, PLAYER_SIZE)
+            cls.wrk_player.room = Dungeon.rooms[0]
         return True
     
     @classmethod
     def running(cls):
-        player = cls.wkg_player
-        player.room.floor.draw(L_RUNNING)
-        player.room.wall.draw(L_RUNNING)
-        for door in player.room.door.values():
-            if door != 0:
-                door.draw(L_RUNNING)
+        player = cls.wrk_player
+        # 이벤트 처리
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 return False
@@ -326,9 +476,40 @@ class Logic:
                 player.move_dir(event.key, 1)
             if event.type == pygame.KEYUP:
                 player.move_dir(event.key, 0)
+        # 바닥, 벽, 문 그리기
+        player.room.floor.draw(L_RUNNING)
+        player.room.wall.draw(L_RUNNING)
+        for door in player.room.door.values():
+            if door != 0:
+                door.draw(L_RUNNING)
+        # 적 처리, 그리기
+        for enemy in player.room.enemies:
+            enemy.show_health()
+            enemy.move()
+            enemy.shoot()
+            enemy.draw(L_RUNNING)
+        # 플레이어 처리, 그리기
         player.move()
         player.room_to()
         player.draw(L_RUNNING)
+        player.show_health()
+        if pygame.key.get_pressed()[pygame.K_TAB]:
+            Dungeon.map(player)
+        if pygame.mouse.get_pressed()[0]:
+            player.shoot()
+        # 투사체 처리, 그리기
+        for projectile in cls.wrk_projectiles:
+            if projectile.room == player.room:
+                projectile.move()
+                is_collide = projectile.collide_check()
+                if is_collide:
+                    cls.wrk_projectiles.remove(projectile)
+                    continue
+                projectile.draw(L_RUNNING)
+        # 게임오버 처리
+        if player.health <= 0:
+            cls.mode = "gameover"
+            return True
         return True
 
     @classmethod
@@ -336,6 +517,12 @@ class Logic:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 return False
+        cls.intro_percentage.write("")
+        cls.intro_time = 0
+        Dungeon.initiaize()
+        cls.wrk_projectiles.clear()
+        cls.wrk_player.health = 100
+        cls.wrk_player.goto((0, 0))
         cls.mode = "main"
         return True
 
