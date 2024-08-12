@@ -21,9 +21,8 @@ pygame.display.set_caption("PIXEL COMBAT")
 SCREEN.fill((255, 255, 255))
 pygame.display.update()
 
-DUN_MAP_SIZE = (5, 5)
-MAP_BKG_SIZE = (WIDTH*0.75, HEIGHT*0.75)
-MAP_ROOM_SIZE = (MAP_BKG_SIZE[0]/DUN_MAP_SIZE[0], MAP_BKG_SIZE[1]/DUN_MAP_SIZE[1])
+FONT1 = "fonts\\neodgm.ttf"
+
 PLAYER_SIZE = (WIDTH/16, HEIGHT/16)
 ENEMY_SIZE = (WIDTH/16, HEIGHT/16)
 VER_DOOR_SIZE = (WIDTH*(3/64)*(115/100), HEIGHT*(10/64)*(115/100))
@@ -34,6 +33,12 @@ DOOR_POS_UP = (WIDTH/2, DOOR_OFF_Y)
 DOOR_POS_LEFT = (DOOR_OFF_X, HEIGHT/2)
 DOOR_POS_DOWN = (WIDTH/2, HEIGHT-DOOR_OFF_Y)
 DOOR_POS_RIGHT = (WIDTH-DOOR_OFF_X, HEIGHT/2)
+DUN_MAP_SIZE = (5, 5)
+MAP_BKG_SIZE = (WIDTH*0.75, HEIGHT*0.75)
+MAP_ROOM_SIZE = (MAP_BKG_SIZE[0]/DUN_MAP_SIZE[0], MAP_BKG_SIZE[1]/DUN_MAP_SIZE[1])
+MAP_STATE_SIZE = (MAP_ROOM_SIZE[0]*0.75, MAP_ROOM_SIZE[1]*0.75)
+MAP_VER_DOOR_SIZE = (VER_DOOR_SIZE[0]*MAP_ROOM_SIZE[0]/MAP_BKG_SIZE[0], VER_DOOR_SIZE[1]*MAP_ROOM_SIZE[1]/MAP_BKG_SIZE[1])
+MAP_HOR_DOOR_SIZE = (HOR_DOOR_SIZE[0]*MAP_ROOM_SIZE[0]/MAP_BKG_SIZE[0], HOR_DOOR_SIZE[1]*MAP_ROOM_SIZE[1]/MAP_BKG_SIZE[1])
 
 L_MAIN = pygame.Surface((WIDTH,HEIGHT), pygame.SRCALPHA)
 L_INTRO = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
@@ -141,11 +146,12 @@ class Player(Entity):
         self.dir_left = 0
         self.dir_down = 0
         self.dir_right = 0
-        self.speed = 5
-        self.max_health = 100
+        self.speed = 4
+        self.max_health = 50
         self.health = self.max_health
         self.shoot_delay = 0
-        self.shoot_max_delay = 30
+        self.shoot_fomula_x = 0
+        self.shoot_max_delay = 300/(self.shoot_fomula_x + 12) + 5
 
     def show_health(self):
         health = self.health
@@ -159,6 +165,9 @@ class Player(Entity):
         health_text = Text(f"{health}/{self.max_health}", (255, 255, 255), (self.rect.centerx, self.rect.midtop[1]-10), 20)
         health_text.draw(L_RUNNING)
     
+    def set_shootdelay(self):
+        self.shoot_max_delay = 300/(self.shoot_fomula_x + 12) + 5
+
     def shoot(self):
         self.shoot_delay += 1
         if self.shoot_delay >= self.shoot_max_delay:
@@ -221,11 +230,15 @@ class Enemy1(Entity):
             for collide in Logic.wrk_colliders:
                 for object in collide:
                     if object is self:
+                        Logic.wrk_score["enemy"] += 1
                         collide.remove(object)
                     if type(object) == Projectile:
                         if object.owner == self:
                             collide.remove(object)
-            Logic.wrk_player.health += 3
+            Logic.wrk_player.health += 1
+            Logic.wrk_player.shoot_fomula_x += 1
+            Logic.wrk_player.set_shootdelay()
+            return
         elif self.health > self.max_health:
             self.health = self.max_health
         health_bar = Image(EFFECT_RED, (self.rect.centerx, self.rect.midtop[1]-10), (self.health, 10))
@@ -332,6 +345,7 @@ class Room:
 class Dungeon:
     map_size = DUN_MAP_SIZE
     floor = 0
+    max_floor = 4
     room_cnt = 0
     rooms = []
     rooms_pos = []
@@ -344,11 +358,15 @@ class Dungeon:
     @classmethod
     def next_floor(cls):
         cls.floor += 1
+        if cls.floor == cls.max_floor+1:
+            return True
         cls.room_cnt = cls.floor + 4
+        Logic.wrk_player.goto(CENTER)
         Logic.wrk_colliders.clear()
         Logic.wrk_colliders.append([Logic.wrk_player])
         Logic.wrk_colliders.append(Logic.wrk_projectiles)
         cls.generate()
+        return False
 
     @classmethod
     def generate(cls):
@@ -374,9 +392,9 @@ class Dungeon:
                 break
         for room in cls.rooms:
             if room.type == 2:
-                room.set_enemy(random.randint(1, 4))
+                room.set_enemy(random.randint(cls.floor, cls.floor+2))
             elif room.type == 1:
-                room.set_enemy(random.randint(5, 8))
+                room.set_enemy(random.randint(cls.floor+4, cls.floor+6))
     
     @classmethod
     def map(cls, player):
@@ -386,16 +404,42 @@ class Dungeon:
             rel_x = room.pos[0] - int(cls.map_size[0]/2)
             rel_y = room.pos[1] - int(cls.map_size[1]/2)
             path = ""
-            if room == player.room:
-                path = WRK_MAP_ROOM_CUR
-            elif room.type == 0:
-                path = WRK_MAP_ROOM0
-            elif room.type == 1:
-                path = WRK_MAP_ROOM1
-            elif room.type == 2:
-                path = WRK_MAP_ROOM2
+            state = ""
+            if room.type == 1:
+                path = WRK_MAP_ROOM_BOSS
+            elif len(room.enemies) == 0:
+                path = WRK_MAP_ROOM_CLEAR
+            elif len(room.enemies) > 0:
+                path = WRK_MAP_ROOM_ENEMY
             image = Image(path, (CENTER[0]+MAP_ROOM_SIZE[0]*rel_x, CENTER[1]-MAP_ROOM_SIZE[1]*rel_y), MAP_ROOM_SIZE)
             image.draw(L_RUNNING)
+            if room.pos == player.room.pos:
+                state = WRK_MAP_STATE_PLAYER
+            if state:
+                state = Image(state, ((CENTER[0]+MAP_ROOM_SIZE[0]*rel_x, CENTER[1]-MAP_ROOM_SIZE[1]*rel_y)), MAP_STATE_SIZE)
+                state.draw(L_RUNNING)
+        for room in cls.rooms:
+            for side, door in room.door.items():
+                if door!= 0:
+                    rel_x = room.pos[0] - int(cls.map_size[0]/2)
+                    rel_y = room.pos[1] - int(cls.map_size[1]/2)
+                    off_x = 0
+                    off_y = 0
+                    size = 0
+                    if side == "up":
+                        off_y = -MAP_ROOM_SIZE[1]/2
+                        size = MAP_HOR_DOOR_SIZE
+                    elif side == "left":
+                        off_x = -MAP_ROOM_SIZE[0]/2
+                        size = MAP_VER_DOOR_SIZE
+                    elif side == "down":
+                        off_y = MAP_ROOM_SIZE[1]/2
+                        size = MAP_HOR_DOOR_SIZE
+                    elif side == "right":
+                        off_x = MAP_ROOM_SIZE[0]/2
+                        size = MAP_VER_DOOR_SIZE
+                    image = Image(WRK_DOOR1, (CENTER[0]+MAP_ROOM_SIZE[0]*rel_x+off_x, CENTER[1]-MAP_ROOM_SIZE[1]*rel_y+off_y), size)
+                    image.draw(L_RUNNING)
 
 class Logic:
     mode = "main"
@@ -405,13 +449,25 @@ class Logic:
     main_start = Button(MAIN_START, MAIN_START_HOVER, (WIDTH*1/2, HEIGHT*8/10), (200, 70))
     main_exit = Button(MAIN_EXIT, MAIN_EXIT_HOVER, (WIDTH*1/2, HEIGHT*9/10), (200, 70))
     
-    intro_loading = Image(EFFECT_BLACK, CENTER, SIZE)
-    intro_percentage = Text("", (255, 255, 255), CENTER, 30)
+    intro_loading = Background(EFFECT_BLACK)
+    intro_percentage = Text("", (255, 255, 255), CENTER, 30, FONT1)
     intro_time = 0
     
     wrk_player = Player(None, CENTER, PLAYER_SIZE)
     wrk_colliders = []
     wrk_projectiles = []
+    wrk_score = {"enemy": 0}
+    wrk_portal_time = 0
+    wrk_player_shootdelay = Text("", (255, 255, 255), CENTER, 15, FONT1)
+    wrk_player_floor = Text("", (255, 255, 255), CENTER, 15, FONT1)
+
+    gameover_background = Background(GAMEOVER_BACKGROUND)
+    gameover_subbackground = Image(EFFECT_WHITE_200, (WIDTH, -HEIGHT/2), SIZE)
+    gameover_time = 150
+    gameover_title = Image(GAMEOVER_TITLE, (CENTER[0], CENTER[1]*1/4), (SIZE[0]*7/8, SIZE[1]/7))
+    gameover_score_floor = Text("", (0, 0, 0), CENTER, 40, FONT1)
+    gameover_score_enemy = Text("", (0, 0, 0), (CENTER[0], CENTER[1]+40), 40, FONT1)
+    gameover_notice = Text("스페이스바를 눌러 메인화면으로", (0, 0, 0), (CENTER[0], CENTER[1]+100), 30, FONT1)
 
     @classmethod
     def start(cls):
@@ -478,9 +534,25 @@ class Logic:
         # 바닥, 벽, 문 그리기
         player.room.floor.draw(L_RUNNING)
         player.room.wall.draw(L_RUNNING)
-        for door in player.room.door.values():
-            if door != 0:
-                door.draw(L_RUNNING)
+        # 문 처리, 그리기
+        if len(player.room.enemies) == 0:
+            for door in player.room.door.values():
+                if door != 0:
+                    door.draw(L_RUNNING)
+            player.room_to()
+        # 포탈 처리, 그리기
+        if player.room.type == 1 and len(player.room.enemies) == 0:
+            cls.wrk_portal_time += 1
+            if cls.wrk_portal_time > 23:
+                cls.wrk_portal_time = 0
+            portal = Image(WRK_PORTALS[cls.wrk_portal_time//6], CENTER, (WIDTH/9, HEIGHT/9))
+            portal.draw(L_RUNNING)
+            if pygame.sprite.collide_mask(portal, player):
+                game_clear = Dungeon.next_floor()
+                if game_clear:
+                    cls.mode = "gameover"
+                    return True
+                player.room = Dungeon.rooms[0]
         # 적 처리, 그리기
         for enemy in player.room.enemies:
             enemy.show_health()
@@ -489,13 +561,18 @@ class Logic:
             enemy.draw(L_RUNNING)
         # 플레이어 처리, 그리기
         player.move()
-        player.room_to()
         player.draw(L_RUNNING)
         player.show_health()
         if pygame.key.get_pressed()[pygame.K_TAB]:
             Dungeon.map(player)
         if pygame.mouse.get_pressed()[0]:
             player.shoot()
+        cls.wrk_player_shootdelay.goto((50 + cls.wrk_player_shootdelay.rect.width/2, 50))
+        cls.wrk_player_shootdelay.write(f"발사 속도 : {round(player.shoot_max_delay/60, 2)}초")
+        cls.wrk_player_shootdelay.draw(L_RUNNING)
+        cls.wrk_player_floor.goto((WIDTH - 50 - cls.wrk_player_floor.rect.width/2, 50))
+        cls.wrk_player_floor.write(f"현재 층 : {Dungeon.floor}")
+        cls.wrk_player_floor.draw(L_RUNNING)
         # 투사체 처리, 그리기
         for projectile in cls.wrk_projectiles:
             if projectile.room == player.room:
@@ -513,16 +590,36 @@ class Logic:
 
     @classmethod
     def gameover(cls):
+        cls.gameover_background.draw(L_GAMEOVER)
+        if cls.gameover_time > 0:
+            cls.gameover_time -= 1
+        subback_y = -((HEIGHT/10000)*pow(cls.gameover_time, 2) - HEIGHT/2)
+        cls.gameover_subbackground.goto((WIDTH/2, subback_y))
+        cls.gameover_subbackground.draw(L_GAMEOVER)
+        if cls.gameover_time == 0:
+            cls.gameover_title.draw(L_GAMEOVER)
+            cls.gameover_score_floor.write(f"최종 층 : {Dungeon.floor}")
+            cls.gameover_score_enemy.write(f"처치한 적 : {cls.wrk_score["enemy"]}")
+            cls.gameover_score_floor.draw(L_GAMEOVER)
+            cls.gameover_score_enemy.draw(L_GAMEOVER)
+            cls.gameover_notice.draw(L_GAMEOVER)
+        # 초기화
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 return False
-        cls.intro_percentage.write("")
-        cls.intro_time = 0
-        Dungeon.initiaize()
-        cls.wrk_projectiles.clear()
-        cls.wrk_player.health = 100
-        cls.wrk_player.goto((0, 0))
-        cls.mode = "main"
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_SPACE:
+                    cls.intro_percentage.write("")
+                    cls.intro_time = 0
+                    Dungeon.initiaize()
+                    cls.wrk_projectiles.clear()
+                    cls.wrk_player.health = cls.wrk_player.max_health
+                    cls.wrk_player.goto((0, 0))
+                    cls.wrk_player.shoot_fomula_x = 0
+                    cls.wrk_player.set_shootdelay()
+                    cls.wrk_score["enemy"] = 0
+                    cls.gameover_time = 100
+                    cls.mode = "main"
         return True
 
 # ================================================== run ==================================================
