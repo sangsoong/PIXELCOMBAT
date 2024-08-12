@@ -217,7 +217,6 @@ class Enemy1(Entity):
         self.health = self.max_health
 
     def show_health(self):
-        health = self.health
         if self.health <= 0:
             for collide in Logic.wrk_colliders:
                 for object in collide:
@@ -228,10 +227,10 @@ class Enemy1(Entity):
                             collide.remove(object)
             Logic.wrk_player.health += 3
         elif self.health > self.max_health:
-            health = self.max_health
+            self.health = self.max_health
         health_bar = Image(EFFECT_RED, (self.rect.centerx, self.rect.midtop[1]-10), (self.health, 10))
         health_bar.draw(L_RUNNING)
-        health_text = Text(f"{health}/{self.max_health}", (255, 255, 255), (self.rect.centerx, self.rect.midtop[1]-10), 20)
+        health_text = Text(f"{self.health}/{self.max_health}", (255, 255, 255), (self.rect.centerx, self.rect.midtop[1]-10), 20)
         health_text.draw(L_RUNNING)
 
     def move(self):
